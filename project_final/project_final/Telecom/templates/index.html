@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html>
+<head>
+
+<title>Customer Churn Dashboard</title>
+
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+
+body{
+margin:0;
+font-family:'Poppins', sans-serif;
+background:linear-gradient(135deg,#0f2027,#203a43,#2c5364);
+color:white;
+display:flex;
+justify-content:center;
+align-items:center;
+min-height:100vh;
+}
+
+.form-box{
+width:100%;
+max-width:400px;
+background:rgba(255,255,255,0.08);
+padding:25px;
+border-radius:20px;
+box-shadow:0 0 20px rgba(0,0,0,0.5);
+}
+
+.container{
+width:90%;
+max-width:1100px;
+margin:auto;
+background:rgba(40, 17, 101, 0.151);
+padding:20px;
+border-radius:20px;
+}
+
+input,select{
+width:100%;
+padding:10px;
+margin:8px 0;
+border-radius:10px;
+background:#23282b;
+color:rgb(194, 184, 184);
+border:none;
+}
+
+select option{color:rgb(243, 239, 239);}
+
+button{
+width:100%;
+padding:12px;
+margin-top:10px;
+border-radius:10px;
+border:none;
+background:linear-gradient(90deg,#00c6ff,#0072ff);
+color:rgb(252, 252, 252);
+cursor:pointer;
+}
+
+.tabs{
+display:flex;
+gap:10px;
+margin-top:15px;
+}
+
+.tabs button{
+flex:1;
+}
+
+.grid{
+display:grid;
+grid-template-columns:1fr 1fr;
+gap:25px;
+margin-top:20px;
+}
+
+.chart-box{
+background:#0b0f12;
+padding:20px;
+border-radius:15px;
+height:320px;
+
+display:flex;
+flex-direction:column;
+align-items:center;
+justify-content:center;
+}
+
+</style>
+
+<script>
+function showTab(tab){
+document.getElementById("dashboard").style.display="none";
+document.getElementById("cmTab").style.display="none";
+document.getElementById(tab).style.display="block";
+}
+</script>
+
+</head>
+
+<body>
+
+{% if not result %}
+
+<div class="form-box">
+
+<h2 style="text-align:center;">Customer Churn Predictor</h2>
+
+<form method="POST">
+
+<input name="tenure" placeholder="Tenure" required>
+<input name="MonthlyCharges" placeholder="Monthly Charges" required>
+
+<select name="Contract">
+<option value="0">Month-to-Month</option>
+<option value="1">1 Year</option>
+<option value="2">2 Year</option>
+</select>
+
+<select name="InternetService">
+<option value="0">DSL(Basic Internet)</option>
+<option value="1">Fiber(High Speed)</option>
+<option value="2">No Internet</option>
+</select>
+
+<select name="SeniorCitizen">
+<option value="0">No(Younger Customer)</option>
+<option value="1">Yes(Senior Citizen)</option>
+</select>
+
+<select name="Partner">
+<option value="0">No(Single Customer)</option>
+<option value="1">Yes(Has Partner)</option>
+</select>
+
+<button>Predict</button>
+
+</form>
+
+</div>
+
+{% else %}
+
+<div class="container">
+
+<h2>Customer Churn Dashboard</h2>
+
+<h3>{{result.pred}}</h3>
+
+<h2 style="color:
+{% if result.prob > 70 %}
+#ff4d4d
+{% elif result.prob > 40 %}
+#ffa500
+{% else %}
+#00e5ff
+{% endif %}
+">
+Churn Risk: {{result.prob}}%
+</h2>
+
+<p style="font-size:16px">
+
+Customer Risk Level:
+
+{% if result.prob > 70 %}
+<span style="color:#ff4d4d;font-weight:bold;">High Risk</span><br>
+⚠ Customer likely to churn. Immediate retention action recommended.
+
+{% elif result.prob > 40 %}
+<span style="color:#ffa500;font-weight:bold;">Medium Risk</span><br>
+⚡ Customer shows moderate churn signals.
+
+{% else %}
+<span style="color:#00e5ff;font-weight:bold;">Low Risk</span><br>
+✅ Customer likely to stay.
+
+{% endif %}
+
+</p>
+<h3>Business Suggestions</h3>
+
+<ul>
+{% for s in result.suggestions %}
+<li>{{s}}</li>
+{% endfor %}
+</ul>
+
+<div class="tabs">
+<button onclick="showTab('dashboard')">Dashboard</button>
+<button onclick="showTab('cmTab')">Confusion Matrix</button>
+</div>
+
+
+<div id="dashboard">
+
+<div class="grid">
+
+<div class="chart-box">
+
+<canvas id="gauge"></canvas>
+
+<p style="text-align:center;margin-top:10px;font-size:14px;color:#ccc;">
+0-40% → Low Risk | 40-70% → Medium Risk | 70-100% → High Risk
+</p>
+
+</div>
+
+<div class="chart-box">
+<canvas id="risk"></canvas>
+</div>
+
+</div>
+
+<div class="chart-box">
+<canvas id="featureChart"></canvas>
+</div>
+
+</div>
+
+
+<div id="cmTab" style="display:none">
+
+<div class="grid">
+
+<div class="chart-box">
+<h3>Logistic Regression</h3>
+<div id="cmLog"></div>
+</div>
+
+<div class="chart-box">
+<h3>Random Forest</h3>
+<div id="cmRF"></div>
+</div>
+
+</div>
+
+</div>
+
+
+<a href="/"><button>New Prediction</button></a>
+<button onclick="printReport()">Download Report</button>
+
+<script>
+
+const prob={{result.prob|tojson}};
+const featureNames={{feature_names|tojson}};
+const featureValues={{feature_values|tojson}};
+
+
+new Chart(document.getElementById("gauge"),{
+type:"doughnut",
+data:{
+labels:["Churn Risk","Safe"],
+datasets:[{
+data:[prob,100-prob],
+backgroundColor:["#ff4d4d","#00e5ff"]
+}]
+},
+options:{
+rotation:-90,
+circumference:180,
+plugins:{
+title:{
+display:true,
+text:"Churn Risk",
+color:"white",
+font:{size:18}
+},
+legend:{
+labels:{color:"white"}
+}
+}
+}
+});
+
+new Chart(document.getElementById("risk"),{
+type:"bar",
+data:{
+labels:["Risk","Safe"],
+datasets:[{
+label:"Probability %",
+data:[prob,100-prob],
+backgroundColor:["#ff3b3b","#00ffff"],
+borderColor:["#ff0000","#00ffff"],
+}]
+},
+options:{
+plugins:{
+title:{
+display:true,
+text:"Risk Comparison",
+color:"white",
+font:{size:18}
+},
+legend:{
+labels:{color:"white"}
+}
+},
+scales:{
+x:{ticks:{color:"white"}},
+y:{ticks:{color:"white"}}
+}
+}
+});
+
+new Chart(document.getElementById("featureChart"),{
+type:"bar",
+data:{
+labels:featureNames,
+datasets:[{
+label:"Feature Importance",
+data:featureValues,
+backgroundColor:"#00ffff",
+borderColor:"#00ffff",
+borderWidth:2
+}]
+},
+options:{
+indexAxis:"y",
+plugins:{
+legend:{labels:{color:"white"}},
+title:{
+display:true,
+text:"Feature Importance",
+color:"white",
+font:{size:18}
+}
+},
+scales:{
+x:{ticks:{color:"white"}},
+y:{ticks:{color:"white"}}
+}
+}
+});
+const cmLog = {{cm_log|tojson}};
+const cmRF = {{cm_rf|tojson}};
+function drawMatrix(container,data){
+
+let html = `
+<table style="width:100%;text-align:center;border-collapse:collapse;font-size:18px">
+
+<tr>
+<th></th>
+<th>Predicted No</th>
+<th>Predicted Yes</th>
+</tr>
+
+<tr>
+<th>Actual No</th>
+<td style="background:#00e5ff55;padding:15px">${data[0][0]}</td>
+<td style="background:#ff4d4d55;padding:15px">${data[0][1]}</td>
+</tr>
+
+<tr>
+<th>Actual Yes</th>
+<td style="background:#ff4d4d55;padding:15px">${data[1][0]}</td>
+<td style="background:#00e5ff55;padding:15px">${data[1][1]}</td>
+</tr>
+
+</table>
+`;
+
+document.getElementById(container).innerHTML = html;
+}
+
+drawMatrix("cmLog",cmLog);
+drawMatrix("cmRF",cmRF);
+function printReport(){
+
+let gauge = document.getElementById('gauge').toDataURL();
+let risk = document.getElementById('risk').toDataURL();
+let feature = document.getElementById('featureChart').toDataURL();
+
+let report = `
+<html>
+<head>
+<title>Customer Churn Report</title>
+
+<style>
+body{
+font-family:Poppins;
+padding:40px;
+background:white;
+color:black;
+}
+
+h1{
+text-align:center;
+}
+
+.chart{
+width:500px;
+margin:20px 0;
+}
+
+ul{
+margin-bottom:30px;
+}
+
+</style>
+
+</head>
+
+<body>
+
+<h1>Customer Churn Prediction Report</h1>
+
+<h2>Prediction</h2>
+<p>{{result.pred}} ({{result.prob}}%)</p>
+
+<h2>Risk Level</h2>
+<p>
+{% if result.prob > 70 %}
+High Risk
+{% elif result.prob > 40 %}
+Medium Risk
+{% else %}
+Low Risk
+{% endif %}
+</p>
+
+<h2>Business Suggestions</h2>
+<ul>
+{% for s in result.suggestions %}
+<li>{{s}}</li>
+{% endfor %}
+</ul>
+
+<h2>Charts</h2>
+
+<img class="chart" src="${gauge}">
+<img class="chart" src="${risk}">
+<img class="chart" src="${feature}">
+
+</body>
+</html>
+`;
+
+let win = window.open("");
+win.document.open();
+win.document.write(report);
+win.document.close();
+
+setTimeout(function(){
+win.print();
+},500);
+
+}
+
+</script>
+
+</div>
+
+{% endif %}
+
+</body>
+</html>

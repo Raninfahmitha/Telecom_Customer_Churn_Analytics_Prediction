@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Customer Churn Pro</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+body{
+margin:0;
+font-family:'Segoe UI';
+background:linear-gradient(135deg,#0f2027,#203a43,#2c5364);
+color:white;
+}
+
+/* CARD */
+.container{
+width:90%;
+max-width:1200px;
+margin:40px auto;
+background:rgba(255,255,255,0.05);
+padding:20px;
+border-radius:20px;
+backdrop-filter: blur(10px);
+}
+
+/* TITLE */
+h2{
+text-align:center;
+}
+
+/* FORM */
+input,select{
+width:100%;
+padding:12px;
+margin:8px 0;
+border-radius:10px;
+border:none;
+background:#1e2a30;
+color:white;
+}
+
+select option{
+background:white;
+color:black;
+}
+
+button{
+width:100%;
+padding:12px;
+border:none;
+border-radius:10px;
+background:linear-gradient(90deg,#00c6ff,#0072ff);
+color:white;
+cursor:pointer;
+margin-top:10px;
+}
+
+/* TABS */
+.tabs{
+display:flex;
+gap:10px;
+margin:15px 0;
+}
+
+.tabs button{
+flex:1;
+}
+
+/* GRID */
+.grid{
+display:grid;
+grid-template-columns:1fr 1fr;
+gap:15px;
+}
+
+.chart-box{
+background:#000;
+border-radius:15px;
+padding:10px;
+height:250px;
+}
+
+canvas{
+width:100%!important;
+height:100%!important;
+}
+
+/* MOBILE */
+@media(max-width:768px){
+.grid{
+grid-template-columns:1fr;
+}
+}
+</style>
+
+<script>
+function showTab(id){
+document.getElementById("dashboard").style.display="none";
+document.getElementById("cmTab").style.display="none";
+document.getElementById(id).style.display="block";
+}
+</script>
+
+</head>
+
+<body>
+
+<div class="container">
+
+<h2>🚀 Customer Churn Dashboard</h2>
+
+{% if not result %}
+
+<form method="POST">
+<input name="tenure" placeholder="Tenure" required>
+<input name="MonthlyCharges" placeholder="Monthly Charges" required>
+
+<select name="Contract">
+<option value="0">Month-to-Month</option>
+<option value="1">1 Year</option>
+<option value="2">2 Year</option>
+</select>
+
+<select name="InternetService">
+<option value="0">DSL</option>
+<option value="1">Fiber</option>
+<option value="2">No Internet</option>
+</select>
+
+<select name="SeniorCitizen">
+<option value="0">No</option>
+<option value="1">Yes</option>
+</select>
+
+<select name="Partner">
+<option value="0">No</option>
+<option value="1">Yes</option>
+</select>
+
+<button>🚀 Predict</button>
+</form>
+
+{% else %}
+
+<h3>{{result.pred}} ({{result.prob}}%)</h3>
+
+<div class="tabs">
+<button onclick="showTab('dashboard')">Dashboard</button>
+<button onclick="showTab('cmTab')">Confusion Matrix</button>
+</div>
+
+<!-- DASHBOARD -->
+<div id="dashboard">
+
+<div class="grid">
+<div class="chart-box"><canvas id="gauge"></canvas></div>
+<div class="chart-box"><canvas id="bar"></canvas></div>
+</div>
+
+<p>
+Accuracy: {{acc}}% |
+Precision: {{prec}}% |
+Recall: {{rec}}% |
+F1: {{f1}}%
+</p>
+
+<ul>
+{% for s in result.suggestions %}
+<li>👉 {{s}}</li>
+{% endfor %}
+</ul>
+
+</div>
+
+<!-- CM TAB -->
+<div id="cmTab" style="display:none">
+
+<div class="grid">
+<div class="chart-box"><canvas id="cmChart"></canvas></div>
+</div>
+
+</div>
+
+<br>
+
+<a href="/download"><button>📄 Download Report</button></a>
+<a href="/"><button>🔄 New Prediction</button></a>
+
+<script>
+var prob={{result.prob}};
+var cm={{cm}};
+
+// GAUGE
+new Chart(gauge,{
+type:'doughnut',
+data:{
+datasets:[{
+data:[prob,100-prob],
+backgroundColor:['#ff4d4d','#00ffff']
+}]
+},
+options:{
+rotation:-90,
+circumference:180,
+cutout:'70%'
+}
+});
+
+// BAR
+new Chart(bar,{
+type:'bar',
+data:{
+labels:['Risk','Safe'],
+datasets:[{
+label:'Probability',
+data:[prob,100-prob],
+backgroundColor:['#ff4d4d','#00ffff']
+}]
+}
+});
+
+// CM
+new Chart(cmChart,{
+type:'bar',
+data:{
+labels:['TN','FP','FN','TP'],
+datasets:[{
+label:'Confusion Matrix',
+data:[
+cm[0][0],
+cm[0][1],
+cm[1][0],
+cm[1][1]
+],
+backgroundColor:['#2ecc71','#e74c3c','#f39c12','#3498db']
+}]
+}
+});
+</script>
+
+{% endif %}
+
+</div>
+
+</body>
+</html>

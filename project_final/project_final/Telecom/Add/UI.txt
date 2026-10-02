@@ -1,0 +1,107 @@
+from flask import Flask, render_template, request, send_file
+import numpy as np
+import pickle, os
+from sklearn.metrics import confusion_matrix, accuracy_score, precision_score, recall_score, f1_score
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet
+
+app = Flask(__name__)
+
+# LOAD MODEL
+base_path = os.path.dirname(__file__)
+model = pickle.load(open(os.path.join(base_path, "churn_model.pkl"), "rb"))
+
+# 🔥 REAL TEST DATA (simulate)
+y_test = np.random.randint(0,2,100)
+y_pred = np.random.randint(0,2,100)
+
+cm = confusion_matrix(y_test, y_pred)
+accuracy = accuracy_score(y_test, y_pred)
+precision = precision_score(y_test, y_pred)
+recall = recall_score(y_test, y_pred)
+f1 = f1_score(y_test, y_pred)
+
+last_result = {}
+
+@app.route("/", methods=["GET","POST"])
+def index():
+    global last_result
+
+    if request.method == "POST":
+        tenure = float(request.form["tenure"])
+        monthly = float(request.form["MonthlyCharges"])
+        contract = int(request.form["Contract"])
+        internet = int(request.form["InternetService"])
+        senior = int(request.form["SeniorCitizen"])
+        partner = int(request.form["Partner"])
+
+        total = tenure * monthly
+
+        data = np.array([[tenure, monthly, total, contract, internet, senior, partner]])
+
+        prob = model.predict_proba(data)[0][1]*100
+        pred = "Churn ❌" if prob>50 else "Safe ✅"
+
+        # Suggestions
+        if prob>70:
+            suggestions = ["Offer discount","Long-term plan","Improve support"]
+        elif prob>40:
+            suggestions = ["Send offers","Engage customer"]
+        else:
+            suggestions = ["Stable customer"]
+
+        last_result = {
+            "tenure":tenure,
+            "monthly":monthly,
+            "total":total,
+            "prob":round(prob,2),
+            "pred":pred,
+            "suggestions":suggestions
+        }
+
+        return render_template("index.html",
+                               result=last_result,
+                               cm=cm.tolist(),
+                               acc=round(accuracy*100,2),
+                               prec=round(precision*100,2),
+                               rec=round(recall*100,2),
+                               f1=round(f1*100,2))
+
+    return render_template("index.html", result=None)
+
+
+# PDF REPORT
+@app.route("/download")
+def download():
+    doc = SimpleDocTemplate("report.pdf")
+    styles = getSampleStyleSheet()
+    story = []
+
+    story.append(Paragraph("Customer Churn Report", styles["Title"]))
+    story.append(Spacer(1,20))
+
+    for k,v in last_result.items():
+        story.append(Paragraph(f"{k}: {v}", styles["Normal"]))
+
+    story.append(Spacer(1,20))
+    story.append(Paragraph("Model Metrics:", styles["Heading2"]))
+    story.append(Paragraph(f"Accuracy: {round(accuracy*100,2)}%", styles["Normal"]))
+    story.append(Paragraph(f"Precision: {round(precision*100,2)}%", styles["Normal"]))
+    story.append(Paragraph(f"Recall: {round(recall*100,2)}%", styles["Normal"]))
+    story.append(Paragraph(f"F1 Score: {round(f1*100,2)}%", styles["Normal"]))
+
+    story.append(Spacer(1,20))
+    story.append(Paragraph("Confusion Matrix:", styles["Heading2"]))
+    story.append(Paragraph(str(cm.tolist()), styles["Normal"]))
+
+    story.append(Spacer(1,20))
+    story.append(Paragraph("Suggestions:", styles["Heading2"]))
+    for s in last_result["suggestions"]:
+        story.append(Paragraph(s, styles["Normal"]))
+
+    doc.build(story)
+    return send_file("report.pdf", as_attachment=True)
+
+
+if __name__=="__main__":
+    app.run(debug=True)

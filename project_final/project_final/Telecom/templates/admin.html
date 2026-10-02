@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Admin Dashboard</title>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+body{
+margin:0;
+font-family:'Poppins';
+background:linear-gradient(135deg,#0f2027,#203a43,#2c5364);
+color:white;
+}
+
+.container{
+width:90%;
+max-width:1100px;
+margin:40px auto;
+background:rgba(255,255,255,0.05);
+padding:20px;
+border-radius:20px;
+}
+
+table{
+width:100%;
+border-collapse:collapse;
+margin-top:20px;
+}
+
+th,td{
+padding:10px;
+border:1px solid #444;
+text-align:center;
+}
+
+button{
+padding:8px;
+border:none;
+border-radius:8px;
+background:#ff4d4d;
+color:white;
+cursor:pointer;
+}
+
+.chart-box{
+background:#0b0f12;
+padding:20px;
+border-radius:15px;
+margin-top:20px;
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+<h2>👨‍💼 Admin Dashboard</h2>
+
+<h3>Users</h3>
+<table>
+<tr><th>ID</th><th>Name</th><th>Role</th><th>Action</th></tr>
+
+{% for u in users %}
+<tr>
+<td>{{u[0]}}</td>
+<td>{{u[1]}}</td>
+<td>{{u[3]}}</td>
+<td><a href="/delete/{{u[0]}}"><button>Delete</button></a></td>
+</tr>
+{% endfor %}
+</table>
+
+<div class="chart-box">
+<canvas id="chart"></canvas>
+</div>
+
+</div>
+
+<script>
+let data = {{chart_data|tojson}};
+let labels = data.map(x=>x[0]);
+let values = data.map(x=>x[1]);
+
+new Chart(document.getElementById("chart"),{
+type:'pie',
+data:{
+labels:labels,
+datasets:[{
+data:values,
+backgroundColor:["#ff4d4d","#00d4ff"]
+}]
+}
+});
+</script>
+
+</body>
+</html>

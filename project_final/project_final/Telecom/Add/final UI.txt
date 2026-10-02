@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Customer Churn</title>
+
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+body{
+margin:0;
+font-family:'Poppins', sans-serif;
+background:linear-gradient(135deg,#0f2027,#203a43,#2c5364);
+color:white;
+display:flex;
+justify-content:center;
+align-items:center;
+min-height:100vh;
+}
+
+/* CENTER FORM */
+.form-box{
+width:100%;
+max-width:400px;
+background:rgba(255,255,255,0.08);
+padding:25px;
+border-radius:20px;
+box-shadow:0 0 20px rgba(0,0,0,0.5);
+}
+
+/* DASHBOARD */
+.container{
+width:90%;
+max-width:1100px;
+margin:auto;
+background:rgba(255,255,255,0.05);
+padding:20px;
+border-radius:20px;
+}
+
+input,select{
+width:100%;
+padding:10px;
+margin:8px 0;
+border-radius:10px;
+background:#1e2a30;
+color:white;
+border:none;
+}
+
+select option{color:black;}
+
+button{
+width:100%;
+padding:12px;
+margin-top:10px;
+border-radius:10px;
+border:none;
+background:linear-gradient(90deg,#00c6ff,#0072ff);
+color:white;
+cursor:pointer;
+}
+
+.tabs{
+display:flex;
+gap:10px;
+margin-top:15px;
+}
+
+.tabs button{
+flex:1;
+}
+
+/* GRID */
+.grid{
+display:grid;
+grid-template-columns:1fr 1fr;
+gap:25px;
+margin-top:20px;
+}
+
+.chart-box{
+background:#0b0f12;
+padding:20px;
+border-radius:15px;
+height:300px;
+margin-bottom:20px;
+}
+
+canvas{
+max-width:100%!important;
+max-height:100%!important;
+}
+</style>
+
+<script>
+function showTab(tab){
+document.getElementById("dashboard").style.display="none";
+document.getElementById("cmTab").style.display="none";
+document.getElementById(tab).style.display="block";
+}
+</script>
+
+</head>
+
+<body>
+
+{% if not result %}
+
+<div class="form-box">
+<h2>🚀 Customer Churn</h2>
+
+<form method="POST">
+
+<input name="tenure" placeholder="Tenure (Months)" required>
+<input name="MonthlyCharges" placeholder="Monthly Charges" required>
+
+<select name="Contract">
+<option value="0">Month-to-Month Contract</option>
+<option value="1">1 Year Contract</option>
+<option value="2">2 Year Contract</option>
+</select>
+
+<select name="InternetService">
+<option value="0">DSL (Basic Internet)</option>
+<option value="1">Fiber (High Speed)</option>
+<option value="2">No Internet Service</option>
+</select>
+
+<select name="SeniorCitizen">
+<option value="0">No (Young Customer)</option>
+<option value="1">Yes (Senior Citizen)</option>
+</select>
+
+<select name="Partner">
+<option value="0">No (Single Customer)</option>
+<option value="1">Yes (Has Partner)</option>
+</select>
+
+<button>Predict</button>
+
+</form>
+</div>
+
+{% else %}
+
+<div class="container">
+
+<h2>🚀 Customer Churn Dashboard</h2>
+
+<h3>{{result.pred}} ({{result.prob}}%)</h3>
+
+<p>Accuracy: {{acc}}% | Precision: {{prec}}% | Recall: {{rec}}% | F1: {{f1}}%</p>
+
+<ul>
+{% for s in result.suggestions %}
+<li>{{s}}</li>
+{% endfor %}
+</ul>
+
+<div class="tabs">
+<button onclick="showTab('dashboard')">Dashboard</button>
+<button onclick="showTab('cmTab')">Confusion Matrix</button>
+</div>
+
+<div id="dashboard">
+
+<div class="grid">
+<div class="chart-box"><canvas id="gauge"></canvas></div>
+<div class="chart-box"><canvas id="bar"></canvas></div>
+</div>
+
+<div class="chart-box">
+<canvas id="featureChart"></canvas>
+</div>
+
+</div>
+
+<div id="cmTab" style="display:none">
+<div class="chart-box">
+<canvas id="cmChart"></canvas>
+</div>
+</div>
+
+<button onclick="downloadReport()">Download Report</button>
+<a href="/"><button>New</button></a>
+
+<script>
+
+var prob={{result.prob}};
+var cm={{cm}};
+
+new Chart(gauge,{type:'doughnut',data:{datasets:[{data:[prob,100-prob],backgroundColor:["red","cyan"]}]},options:{rotation:-90,circumference:180}});
+new Chart(bar,{type:'bar',data:{labels:["Risk","Safe"],datasets:[{data:[prob,100-prob]}]}});
+
+new Chart(featureChart,{
+type:'bar',
+data:{labels: {{feature_names|tojson}},datasets:[{data: {{feature_values|tojson}}}]},
+options:{indexAxis:'y'}
+});
+
+new Chart(cmChart,{
+type:'bar',
+data:{labels:["TN","FP","FN","TP"],datasets:[{data:[cm[0][0],cm[0][1],cm[1][0],cm[1][1]]}]}
+});
+
+function downloadReport(){
+fetch('/download',{
+method:'POST',
+headers:{'Content-Type':'application/json'},
+body:JSON.stringify({
+gauge:gauge.toDataURL(),
+cm:cmChart.toDataURL(),
+feature:featureChart.toDataURL(),
+inputs: {{inputs|tojson}},
+result:"{{result.pred}}",
+suggestions: {{result.suggestions|tojson}}
+})
+})
+.then(res=>res.blob())
+.then(blob=>{
+let a=document.createElement('a');
+a.href=URL.createObjectURL(blob);
+a.download="report.pdf";
+a.click();
+});
+}
+</script>
+
+</div>
+
+{% endif %}
+
+</body>
+</html>

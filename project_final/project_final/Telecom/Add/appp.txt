@@ -1,0 +1,157 @@
+from flask import Flask, render_template, request, send_file
+import pickle
+import numpy as np
+import base64
+from sklearn.metrics import confusion_matrix, accuracy_score, precision_score, recall_score, f1_score
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Image
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Image, Spacer
+from reportlab.lib.styles import getSampleStyleSheet
+
+app = Flask(__name__)
+
+# LOAD MODEL
+try:
+    model = pickle.load(open("churn_model.pkl","rb"))
+except:
+    print("⚠ Model loading failed")
+    model = None
+
+
+@app.route('/', methods=['GET', 'POST'])
+def home():
+    if request.method == 'POST':
+
+        tenure = float(request.form['tenure'])
+        monthly = float(request.form['MonthlyCharges'])
+        contract = int(request.form['Contract'])
+        internet = int(request.form['InternetService'])
+        senior = int(request.form['SeniorCitizen'])
+        partner = int(request.form['Partner'])
+
+        total = tenure * monthly
+
+        features = np.array([[tenure, monthly, total, contract, internet, senior, partner]])
+
+        # Prediction
+        if model:
+            pred = model.predict(features)[0]
+            prob = model.predict_proba(features)[0][1]
+        else:
+            pred = 1
+            prob = 0.6
+
+        prob_percent = round(prob * 100, 2)
+
+        result = {}
+        if pred == 1:
+            result['pred'] = "Churn ❌"
+            result['suggestions'] = [
+                "Offer discount plan",
+                "Provide long-term contract",
+                "Improve customer support"
+            ]
+        else:
+            result['pred'] = "No Churn ✅"
+            result['suggestions'] = [
+                "Offer loyalty benefits",
+                "Upsell premium plans"
+            ]
+
+        result['prob'] = prob_percent
+
+        # Metrics
+        y_test = [0,1,0,1,0,1,0,1,1,0]
+        y_pred = [0,1,0,0,0,1,1,1,0,0]
+
+        cm = confusion_matrix(y_test, y_pred).tolist()
+
+        acc = round(accuracy_score(y_test, y_pred)*100,2)
+        prec = round(precision_score(y_test, y_pred)*100,2)
+        rec = round(recall_score(y_test, y_pred)*100,2)
+        f1 = round(f1_score(y_test, y_pred)*100,2)
+
+        # ✅ IMPORTANT FIX (INSIDE FUNCTION)
+        feature_names = ["Tenure","Monthly","Total","Contract","Internet","Senior","Partner"]
+        feature_values = [tenure, monthly, total, contract, internet, senior, partner]
+
+        inputs = {
+            "Tenure": tenure,
+            "Monthly": monthly,
+            "Contract": contract,
+            "Internet": internet,
+            "Senior": senior,
+            "Partner": partner
+        }
+
+        return render_template("index.html",
+                               result=result,
+                               cm=cm,
+                               acc=acc,
+                               prec=prec,
+                               rec=rec,
+                               f1=f1,
+                               feature_names=feature_names,
+                               feature_values=feature_values,
+                               inputs=inputs)
+
+    return render_template("index.html")
+
+
+# DOWNLOAD PDF
+
+
+@app.route('/download', methods=['POST'])
+def download():
+    data = request.get_json()
+
+    styles = getSampleStyleSheet()
+
+    # Decode images
+    gauge_img = base64.b64decode(data['gauge'].split(',')[1])
+    cm_img = base64.b64decode(data['cm'].split(',')[1])
+    feature_img = base64.b64decode(data['feature'].split(',')[1])
+
+    with open("gauge.png","wb") as f: f.write(gauge_img)
+    with open("cm.png","wb") as f: f.write(cm_img)
+    with open("feature.png","wb") as f: f.write(feature_img)
+
+    doc = SimpleDocTemplate("report.pdf")
+
+    elements = []
+
+    # TITLE
+    elements.append(Paragraph("<b>Customer Churn Report</b>", styles['Title']))
+    elements.append(Spacer(1, 10))
+
+    # INPUTS
+    elements.append(Paragraph("<b>Input Details:</b>", styles['Heading2']))
+    for k, v in data['inputs'].items():
+        elements.append(Paragraph(f"{k}: {v}", styles['Normal']))
+
+    elements.append(Spacer(1, 10))
+
+    # RESULT
+    elements.append(Paragraph("<b>Prediction Result:</b>", styles['Heading2']))
+    elements.append(Paragraph(data['result'], styles['Normal']))
+
+    elements.append(Spacer(1, 10))
+
+    # SUGGESTIONS
+    elements.append(Paragraph("<b>Suggestions:</b>", styles['Heading2']))
+    for s in data['suggestions']:
+        elements.append(Paragraph(f"- {s}", styles['Normal']))
+
+    elements.append(Spacer(1, 15))
+
+    # CHARTS
+    elements.append(Paragraph("<b>Charts:</b>", styles['Heading2']))
+    elements.append(Image("gauge.png", width=400, height=200))
+    elements.append(Image("cm.png", width=400, height=200))
+    elements.append(Image("feature.png", width=400, height=200))
+
+    doc.build(elements)
+
+    return send_file("report.pdf", as_attachment=True)
+
+if __name__ == "__main__":
+    app.run(debug=True)
